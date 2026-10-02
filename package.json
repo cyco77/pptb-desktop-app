@@ -36,6 +36,11 @@
     "contributors:generate": "all-contributors generate"
   },
   "packageManager": "pnpm@10.18.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  },
   "keywords": [
     "powerplatform",
     "dataverse",
