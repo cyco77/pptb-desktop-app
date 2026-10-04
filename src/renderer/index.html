@@ -723,6 +723,39 @@
                     </svg>
                     <span class="footer-terminal-toggle-label">Show Terminal</span>
                 </button>
+                <div class="github-star-prompt">
+                    <button type="button" class="github-star-button" id="footer-github-star-btn" title="Support PPTB on GitHub" aria-label="Support PPTB on GitHub" aria-expanded="false" aria-controls="footer-github-star-popover">
+                        <svg width="16" height="16" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="m10 1.8 2.53 5.13 5.66.82-4.1 4 .97 5.64L10 14.73l-5.06 2.66.97-5.64-4.1-4 5.66-.82L10 1.8Z" />
+                        </svg>
+                    </button>
+                    <section class="github-star-popover" id="footer-github-star-popover" aria-labelledby="footer-github-star-title" hidden>
+                        <header class="github-star-popover-header">
+                            <h2 id="footer-github-star-title">
+                                <svg width="16" height="16" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path d="m10 1.8 2.53 5.13 5.66.82-4.1 4 .97 5.64L10 14.73l-5.06 2.66.97-5.64-4.1-4 5.66-.82L10 1.8Z" />
+                                </svg>
+                                Enjoying PPTB?
+                            </h2>
+                            <button type="button" class="github-star-close" aria-label="Close">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path d="m4 4 8 8m0-8-8 8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                                </svg>
+                            </button>
+                        </header>
+                        <p>PPTB is open source. If it helped today, a GitHub star helps other developers find it.</p>
+                        <footer class="github-star-popover-actions">
+                            <button type="button" class="github-star-open">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path d="M9.5 2.5h4v4m-.5-3.5-6 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                                    <path d="M12.5 8.5v4a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                                </svg>
+                                Open GitHub
+                            </button>
+                            <button type="button" class="github-star-later">Later</button>
+                        </footer>
+                    </section>
+                </div>
                 <span id="secondary-connection-status" class="secondary-connection-status"></span>
                 <button type="button" class="footer-bell-btn" id="footer-notification-bell-btn" title="Notifications" aria-label="Notifications" aria-pressed="false" aria-haspopup="true">
                     <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

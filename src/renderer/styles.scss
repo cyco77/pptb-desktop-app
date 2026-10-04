@@ -1959,6 +1959,160 @@ body.dark-theme .consent-status.revoked {
     gap: 12px;
 }
 
+.github-star-prompt {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.github-star-button,
+.github-star-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.github-star-button {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    transition:
+        color 0.15s ease,
+        background 0.15s ease;
+}
+
+.github-star-button svg,
+.github-star-popover-header h2 svg {
+    fill: #e0a526;
+}
+
+.github-star-button:hover,
+.github-star-button[aria-expanded="true"] {
+    color: #e0a526;
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.dark-theme .github-star-button:hover,
+.dark-theme .github-star-button[aria-expanded="true"] {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.github-star-button:focus-visible,
+.github-star-close:focus-visible,
+.github-star-popover-actions button:focus-visible {
+    outline: 2px solid var(--accent-color, #0078d4);
+    outline-offset: 2px;
+}
+
+.github-star-popover {
+    position: absolute;
+    right: -8px;
+    bottom: calc(100% + 12px);
+    z-index: 110;
+    width: min(344px, calc(100vw - 32px));
+    padding: 14px;
+    color: var(--text-color);
+    background: var(--sidebar-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.github-star-popover::after {
+    position: absolute;
+    right: 14px;
+    bottom: -6px;
+    width: 10px;
+    height: 10px;
+    content: "";
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    transform: rotate(45deg);
+}
+
+.github-star-popover[hidden] {
+    display: none;
+}
+
+.github-star-popover-header,
+.github-star-popover-header h2,
+.github-star-popover-actions {
+    display: flex;
+    align-items: center;
+}
+
+.github-star-popover-header {
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.github-star-popover-header h2 {
+    gap: 8px;
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.github-star-close {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+}
+
+.github-star-close:hover {
+    color: var(--text-color);
+    background: rgba(128, 128, 128, 0.12);
+}
+
+.github-star-popover p {
+    margin: 12px 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.github-star-popover-actions {
+    gap: 8px;
+}
+
+.github-star-popover-actions button {
+    display: inline-flex;
+    min-height: 32px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: var(--text-color);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.github-star-open {
+    flex: 1;
+    background: rgba(224, 165, 38, 0.2);
+}
+
+.github-star-open:hover {
+    background: rgba(224, 165, 38, 0.3);
+}
+
+.github-star-later {
+    background: rgba(128, 128, 128, 0.14);
+}
+
+.github-star-later:hover {
+    background: rgba(128, 128, 128, 0.24);
+}
+
 .connection-status,
 .secondary-connection-status {
     font-size: 12px;

@@ -115,6 +115,9 @@ export async function initializeApplication(): Promise<void> {
         // Set up sidebar buttons
         setupSidebarButtons();
 
+        // Set up the GitHub star prompt in the footer
+        setupGitHubStarPrompt();
+
         // Set up inline search clear buttons
         setupSidebarSearchClearButtons();
 
@@ -602,6 +605,36 @@ function setupHomeScreenButtons(): void {
                 e.preventDefault();
                 window.toolboxAPI.openExternal(url);
             });
+        }
+    });
+}
+
+function setupGitHubStarPrompt(): void {
+    const container = document.querySelector<HTMLElement>(".github-star-prompt");
+    const button = document.getElementById("footer-github-star-btn");
+    const popover = document.getElementById("footer-github-star-popover");
+    if (!container || !button || !popover) return;
+
+    const setOpen = (open: boolean): void => {
+        button.setAttribute("aria-expanded", String(open));
+        popover.hidden = !open;
+    };
+
+    button.addEventListener("click", () => setOpen(popover.hidden));
+    popover.querySelector(".github-star-close")?.addEventListener("click", () => setOpen(false));
+    popover.querySelector(".github-star-later")?.addEventListener("click", () => setOpen(false));
+    popover.querySelector(".github-star-open")?.addEventListener("click", () => {
+        void window.toolboxAPI.openExternal("https://github.com/PowerPlatformToolBox/desktop-app");
+        setOpen(false);
+    });
+
+    document.addEventListener("click", (event) => {
+        if (event.target instanceof Node && !container.contains(event.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !popover.hidden) {
+            setOpen(false);
+            button.focus();
         }
     });
 }
