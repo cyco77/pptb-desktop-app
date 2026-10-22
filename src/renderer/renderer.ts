@@ -7,6 +7,10 @@
  */
 
 import { initializeApplication } from "./modules/initialization";
+import { initDockLayoutSpike } from "./modules/dockLayoutSpike";
 
 // Start the application when DOM is loaded
-document.addEventListener("DOMContentLoaded", initializeApplication);
+document.addEventListener("DOMContentLoaded", () => {
+    initDockLayoutSpike();
+    void initializeApplication();
+});

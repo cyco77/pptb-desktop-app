@@ -24,6 +24,7 @@ import { getUnsupportedRequirement, getUnsupportedToolMessage } from "../utils/t
 import { openSelectConnectionModal, openSelectMultiConnectionModal } from "./connectionManagement";
 import { openCspExceptionModal } from "./consent/cspExceptionModal";
 import { hideHomePage, showHomePage as showDynamicHomePage } from "./homepageManagement";
+import { isDockLayoutActive, moveDockTab, notifyDockToolsChanged, refreshDockLocalPage, selectDockTab } from "./dockLayoutEvents";
 
 // Constants
 const TAB_SCROLL_AMOUNT = 200; // Pixels to scroll when clicking scroll buttons
@@ -71,10 +72,15 @@ export function applyAppearanceSettings(showCategoryColor: boolean, showEnvironm
     updateActiveToolConnectionStatus().catch((err) => {
         logError(err instanceof Error ? err : new Error(String(err)));
     });
+    void refreshDockAppearance().catch((error) => logError(error instanceof Error ? error : new Error(String(error))));
 }
 
 // Detail tab state - maps tabId to render callback for tool detail tabs
 const detailTabs = new Map<string, (panel: HTMLElement) => void>();
+
+export function getLocalPageRenderer(tabId: string): ((panel: HTMLElement) => void) | undefined {
+    return detailTabs.get(tabId);
+}
 
 // Close guards - async callbacks that can cancel a tab close (return false to prevent)
 const closeGuards = new Map<string, () => Promise<boolean>>();
@@ -200,13 +206,16 @@ async function changeToolConnectionForInstance(instanceId: string): Promise<void
     }
 }
 
-async function showTabContextMenu(instanceId: string, clientX: number, clientY: number): Promise<void> {
+export async function showTabContextMenu(instanceId: string, clientX: number, clientY: number): Promise<void> {
     const canManageTab = canManageToolTab(instanceId);
     const canCloseCurrent = canCloseTab(instanceId);
     const closableOtherTabIds = getClosableTabIds(instanceId);
     const closableTabIds = getClosableTabIds();
     // "Split Right" is available when there is at least one OTHER regular open tab
     const canSplitRight = canManageTab && Array.from(openTools.values()).some((t) => t.instanceId !== instanceId && !t.isDetailTab);
+    const isDock = isDockLayoutActive();
+    const canDock = Array.from(openTools.keys()).some((id) => id !== instanceId);
+    const isPinned = openTools.get(instanceId)?.isPinned ?? false;
     // "Move to Right/Left Pane" based on current split state and which pane this tab is in
     const currentPane = isSplitActive ? getTabCurrentPane(instanceId) : null;
     const canMoveToRight = isSplitActive && currentPane === "left" && canManageTab;
@@ -223,10 +232,18 @@ async function showTabContextMenu(instanceId: string, clientX: number, clientY: 
                 { id: "close-current", label: "Close Tab", enabled: canCloseCurrent },
                 { id: "close-others", label: "Close Other Tabs", enabled: closableOtherTabIds.length > 0 },
                 { id: "close-all", label: "Close All Tabs", enabled: closableTabIds.length > 0 },
+                ...(isDock && canManageTab ? [{ id: "toggle-pin", label: isPinned ? "Unpin Tab" : "Pin Tab" }] : []),
                 { type: "separator" },
-                { id: "split-right", label: "Split Right", enabled: canSplitRight && !isSplitActive },
-                { id: "move-to-right", label: "Move to Right Pane", enabled: canMoveToRight },
-                { id: "move-to-left", label: "Move to Left Pane", enabled: canMoveToLeft },
+                ...(isDock
+                    ? [
+                          { id: "dock-right", label: "Dock to Right", enabled: canDock },
+                          { id: "dock-bottom", label: "Dock to Bottom", enabled: canDock },
+                      ]
+                    : [
+                          { id: "split-right", label: "Split Right", enabled: canSplitRight && !isSplitActive },
+                          { id: "move-to-right", label: "Move to Right Pane", enabled: canMoveToRight },
+                          { id: "move-to-left", label: "Move to Left Pane", enabled: canMoveToLeft },
+                      ]),
                 { type: "separator" },
                 { id: "duplicate-tab", label: "Duplicate Tab", enabled: canManageTab },
                 { id: "duplicate-tab-new-connection", label: "Duplicate Tab with New Connection", enabled: canManageTab },
@@ -249,6 +266,16 @@ async function showTabContextMenu(instanceId: string, clientX: number, clientY: 
     }
 
     if (!action) {
+        return;
+    }
+
+    if (action === "dock-right" || action === "dock-bottom") {
+        moveDockTab(instanceId, action === "dock-right" ? "right" : "bottom");
+        return;
+    }
+
+    if (action === "toggle-pin") {
+        togglePinTab(instanceId);
         return;
     }
 
@@ -749,6 +776,7 @@ export function createTab(instanceId: string, tool: any, instanceNumber: number 
     tab.appendChild(pinBtn);
     tab.appendChild(closeBtn);
     toolTabs.appendChild(tab);
+    notifyDockToolsChanged();
 
     void updateTabConnectionSubtext(instanceId);
     void updateTabImpersonationIndicator(instanceId);
@@ -896,9 +924,11 @@ export async function openLocalPageAsTab(tabId: string, displayName: string, ren
     if (openTools.has(tabId)) {
         // Refresh content in case install state changed
         detailTabs.set(tabId, renderContent);
-        const detailPanel = document.getElementById("tool-detail-content-panel");
-        if (detailPanel) {
-            detailPanel.removeAttribute("data-tab-id");
+        if (isDockLayoutActive()) {
+            refreshDockLocalPage(tabId);
+        } else {
+            const detailPanel = document.getElementById("tool-detail-content-panel");
+            detailPanel?.removeAttribute("data-tab-id");
         }
         await switchToTool(tabId);
         return;
@@ -961,6 +991,7 @@ export async function openLocalPageAsTab(tabId: string, displayName: string, ren
         secondaryConnectionId: null,
         isDetailTab: true,
     });
+    notifyDockToolsChanged();
 
     // Ensure tool panel is visible
     hideHomePage();
@@ -993,6 +1024,7 @@ export async function switchToTool(instanceId: string): Promise<void> {
 
     // Normal single view mode
     activeToolId = instanceId;
+    if (isDockLayoutActive()) selectDockTab(instanceId);
 
     // Update tab active states
     document.querySelectorAll(".tool-tab").forEach((tab) => {
@@ -1009,6 +1041,11 @@ export async function switchToTool(instanceId: string): Promise<void> {
 
     // Handle tool detail tabs (no BrowserView - content is rendered inline)
     if (openTool?.isDetailTab) {
+        if (isDockLayoutActive()) {
+            void updateImpersonationBanner(null);
+            await updateActiveToolConnectionStatus();
+            return;
+        }
         // Hide any active BrowserView
         window.toolboxAPI.hideToolWindows().catch((error: any) => {
             logError(error instanceof Error ? error : new Error(String(error)));
@@ -1122,6 +1159,7 @@ export async function closeTool(instanceId: string): Promise<void> {
 
     // Remove from open tools
     openTools.delete(instanceId);
+    notifyDockToolsChanged();
 
     // Update toolbar buttons
     updateToolbarButtonVisibility();
@@ -1198,6 +1236,7 @@ export function togglePinTab(instanceId: string): void {
     }
 
     saveSession();
+    notifyDockToolsChanged();
 }
 
 /**
@@ -1672,6 +1711,55 @@ function getEnvBorderColor(environment: string): string {
     return styles.getPropertyValue(cssVar).trim() || "#8a8886";
 }
 
+/** Apply the existing appearance preferences to every rc-dock tab and its active panel. */
+export async function refreshDockAppearance(): Promise<void> {
+    const dockRoot = document.getElementById("dock-layout-root");
+    if (!dockRoot || !dockRoot.querySelector(".dock-panel")) return;
+
+    const connections = await window.toolboxAPI.connections.getAll();
+    const validColor = (color?: string | null): string | null => (color && /^#[0-9A-Fa-f]{6}$/.test(color) ? color : null);
+
+    for (const tab of Array.from(dockRoot.querySelectorAll<HTMLElement>(".dock-tab"))) {
+        tab.style.borderBottom = "";
+        tab.style.removeProperty("border-image");
+        const instanceId = tab.querySelector<HTMLElement>("[data-dock-instance-id]")?.dataset.dockInstanceId;
+        const tool = instanceId ? openTools.get(instanceId) : undefined;
+        if (!tool || tool.isDetailTab || !_showCategoryColor) continue;
+
+        const [primaryId, secondaryId] = tool.connectionIds ?? [tool.connectionId, tool.secondaryConnectionId];
+        const primary = connections.find((connection: Connection) => connection.id === primaryId);
+        const secondary = connections.find((connection: Connection) => connection.id === secondaryId);
+        const first = validColor(primary?.categoryColor);
+        const second = validColor(secondary?.categoryColor);
+        if (first && second && first !== second) {
+            tab.style.borderBottom = `${_categoryColorThickness}px solid transparent`;
+            tab.style.borderImage = `linear-gradient(to right, ${first} 50%, ${second} 50%) 0 0 1 0 / 0 0 ${_categoryColorThickness}px 0`;
+        } else if (first || second) {
+            tab.style.borderBottom = `${_categoryColorThickness}px solid ${first ?? second}`;
+        }
+    }
+
+    for (const panel of Array.from(dockRoot.querySelectorAll<HTMLElement>(".dock-panel"))) {
+        panel.style.border = "";
+        panel.style.borderImage = "";
+        const instanceId = panel.querySelector<HTMLElement>(".dock-tab-active [data-dock-instance-id]")?.dataset.dockInstanceId;
+        const tool = instanceId ? openTools.get(instanceId) : undefined;
+        if (!tool || tool.isDetailTab || !_showEnvironmentColor) continue;
+
+        const [primaryId, secondaryId] = tool.connectionIds ?? [tool.connectionId, tool.secondaryConnectionId];
+        const primary = connections.find((connection: Connection) => connection.id === primaryId);
+        const secondary = connections.find((connection: Connection) => connection.id === secondaryId);
+        const first = primary ? validColor(primary.environmentColor) ?? getEnvBorderColor(primary.environment) : null;
+        const second = secondary ? validColor(secondary.environmentColor) ?? getEnvBorderColor(secondary.environment) : null;
+        if (first && second && first !== second) {
+            panel.style.border = `${_environmentColorThickness}px solid transparent`;
+            panel.style.borderImage = `linear-gradient(to right, ${first} 50%, ${second} 50%) 1`;
+        } else if (first || second) {
+            panel.style.border = `${_environmentColorThickness}px solid ${first ?? second}`;
+        }
+    }
+}
+
 /**
  * Update the tool panel border and tab highlight based on the connection environment
  * @param environment The connection environment (Dev, Test, UAT, Production) or null to clear
@@ -1684,6 +1772,7 @@ function updateToolPanelBorder(
     categoryColor?: string | null,
     secondaryCategoryColor?: string | null,
 ): void {
+    void refreshDockAppearance().catch((error) => logError(error instanceof Error ? error : new Error(String(error))));
     const envThickness = _environmentColorThickness;
     const catThickness = _categoryColorThickness;
 
@@ -2196,6 +2285,7 @@ export function initializeCalleeToolListeners(): void {
 
         // Remove from the open-tools map.
         openTools.delete(calleeInstanceId);
+        notifyDockToolsChanged();
 
         updateToolbarButtonVisibility();
         updateTabScrollButtons();

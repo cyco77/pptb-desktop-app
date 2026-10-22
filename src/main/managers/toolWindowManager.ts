@@ -118,6 +118,11 @@ export class ToolWindowManager {
     private focusListener: () => void;
     private showListener: () => void;
     private rendererInitializedListener: () => void;
+    private dockBoundsListener: (event: Electron.IpcMainEvent, bounds: Array<{ instanceId: string; x: number; y: number; width: number; height: number }>) => void;
+    private dockDragStateListener: (event: Electron.IpcMainEvent, isDragging: boolean) => void;
+    private dockBounds = new Map<string, { x: number; y: number; width: number; height: number }>();
+    private dockDragActive = false;
+    private dockLayoutActive = false;
     private onActiveToolChanged: ((activeToolId: string | null) => void) | null = null;
     private onToolLaunched: ((instanceId: string, tool: Tool) => void | Promise<void>) | null = null;
     private onOwnerDisposing: ((owner: { toolId: string; instanceId: string }) => Promise<void>) | null = null;
@@ -207,6 +212,41 @@ export class ToolWindowManager {
                     .then(() => this.closeAllToolViews())
                     .catch((error) => logError("[ToolWindowManager] Worker cleanup failed", error));
             else this.closeAllToolViews();
+        };
+        this.dockBoundsListener = (event, bounds) => {
+            if (event.sender !== this.mainWindow.webContents) return;
+            if (!Array.isArray(bounds)) return;
+            this.dockLayoutActive = true;
+            const zoomFactor = this.mainWindow.webContents.getZoomFactor();
+            this.dockBounds = new Map(
+                bounds
+                    .filter((item) => item.instanceId && item.width > 0 && item.height > 0)
+                    .map((item) => [
+                        item.instanceId,
+                        {
+                            x: Math.round(item.x * zoomFactor),
+                            y: Math.round(item.y * zoomFactor),
+                            width: Math.round(item.width * zoomFactor),
+                            height: Math.round(item.height * zoomFactor),
+                        },
+                    ]),
+            );
+            if (!this.dockDragActive) this.applyDockBounds();
+        };
+        this.dockDragStateListener = (event, isDragging) => {
+            if (event.sender !== this.mainWindow.webContents || typeof isDragging !== "boolean") return;
+            this.dockDragActive = isDragging;
+            if (isDragging) {
+                for (const view of this.toolViews.values()) {
+                    try {
+                        this.mainWindow.removeBrowserView(view);
+                    } catch {
+                        // View may already be detached.
+                    }
+                }
+            } else {
+                this.applyDockBounds();
+            }
         };
         this.setupIpcHandlers();
     }
@@ -383,6 +423,8 @@ export class ToolWindowManager {
         // BrowserViews from the previous session must be destroyed before new ones
         // are created by the incoming session restore.
         ipcMain.on(TOOL_WINDOW_CHANNELS.RENDERER_INITIALIZED, this.rendererInitializedListener);
+        ipcMain.on(TOOL_WINDOW_CHANNELS.DOCK_BOUNDS_CHANGED, this.dockBoundsListener);
+        ipcMain.on(TOOL_WINDOW_CHANNELS.DOCK_DRAG_STATE_CHANGED, this.dockDragStateListener);
 
         // Update tool window bounds on common window state changes
         this.mainWindow.on("resize", this.refreshBoundsListener);
@@ -889,6 +931,20 @@ export class ToolWindowManager {
                 return false;
             }
 
+            if (this.dockLayoutActive) {
+                this.activeToolId = instanceId;
+                this.invokeActiveToolChangedCallback();
+                const invocationEntry = this.pendingInvocations.get(instanceId);
+                if (invocationEntry && !invocationEntry.noReturn) {
+                    const callerToolName = this.toolInstanceNames.get(invocationEntry.callerInstanceId) ?? "Caller";
+                    this.mainWindow.webContents.send(TOOL_WINDOW_CHANNELS.INVOCATION_BANNER_STATE, { visible: true, callerToolName });
+                } else {
+                    this.mainWindow.webContents.send(TOOL_WINDOW_CHANNELS.INVOCATION_BANNER_STATE, { visible: false });
+                }
+                this.applyDockBounds();
+                return true;
+            }
+
             // ── Split-mode handling ───────────────────────────────────────────────────
             // When split is active, all tool switches are handled here regardless of
             // whether the instance is already in a pane or is a brand-new tool.
@@ -1289,6 +1345,12 @@ export class ToolWindowManager {
      * Apply the bounds to the active tool view
      */
     private applyToolViewBounds(bounds: { x: number; y: number; width: number; height: number }): void {
+        if (this.dockLayoutActive) {
+            this.applyDockBounds();
+            this.boundsUpdatePending = false;
+            return;
+        }
+
         // ── Split-mode: delegate entirely to SplitLayoutManager ──────────────────
         if (this.splitLayoutManager?.isActive) {
             this.splitLayoutManager.applyLayout(bounds);
@@ -1317,6 +1379,31 @@ export class ToolWindowManager {
         }
     }
 
+    private applyDockBounds(): void {
+        if (this.dockDragActive) return;
+
+        const content = this.mainWindow.getContentBounds();
+        for (const [instanceId, view] of this.toolViews) {
+            if (view.webContents.isDestroyed()) continue;
+            const bounds = this.dockBounds.get(instanceId);
+            try {
+                if (!bounds) {
+                    this.mainWindow.removeBrowserView(view);
+                    continue;
+                }
+                this.mainWindow.addBrowserView(view);
+                view.setBounds({
+                    x: Math.max(0, Math.min(bounds.x, content.width - 1)),
+                    y: Math.max(0, Math.min(bounds.y, content.height - 1)),
+                    width: Math.max(1, Math.min(bounds.width, content.width - Math.max(0, bounds.x))),
+                    height: Math.max(1, Math.min(bounds.height, content.height - Math.max(0, bounds.y))),
+                });
+            } catch (error) {
+                logError(`[ToolWindowManager] Failed to apply dock bounds for ${instanceId}`, error);
+            }
+        }
+    }
+
     /**
      * Destroy all open BrowserViews and reset tool state without touching IPC/window listeners.
      * Called when the renderer re-initialises (e.g. after a force-reload) so that stale views
@@ -1339,6 +1426,8 @@ export class ToolWindowManager {
         }
 
         this.toolViews.clear();
+        this.dockBounds.clear();
+        this.dockLayoutActive = false;
         this.loadedToolIdentities.clear();
         this.toolConnectionInfo.clear();
         this.preventCloseTools.clear();
@@ -1456,6 +1545,8 @@ export class ToolWindowManager {
         if (this.bannerVisibilityListener) ipcMain.removeListener("impersonation-banner-visibility-changed", this.bannerVisibilityListener);
         if (this.sidebarLayoutListener) ipcMain.removeListener("sidebar-layout-changed", this.sidebarLayoutListener);
         if (this.rendererInitializedListener) ipcMain.removeListener(TOOL_WINDOW_CHANNELS.RENDERER_INITIALIZED, this.rendererInitializedListener);
+        ipcMain.removeListener(TOOL_WINDOW_CHANNELS.DOCK_BOUNDS_CHANGED, this.dockBoundsListener);
+        ipcMain.removeListener(TOOL_WINDOW_CHANNELS.DOCK_DRAG_STATE_CHANGED, this.dockDragStateListener);
 
         if (this.refreshBoundsListener) {
             this.mainWindow.removeListener("resize", this.refreshBoundsListener);

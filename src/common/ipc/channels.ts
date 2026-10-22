@@ -154,6 +154,10 @@ export const TOOL_WINDOW_CHANNELS = {
     GET_IMPERSONATION: "tool-window:get-impersonation",
     SET_IMPERSONATION: "tool-window:set-impersonation",
     RESET_IMPERSONATION: "tool-window:reset-impersonation",
+    /** Renderer-only docking spike: bounds for every currently visible tool panel. */
+    DOCK_BOUNDS_CHANGED: "tool-window:dock-bounds-changed",
+    /** Temporarily hide native tool views while an HTML drag overlay is active. */
+    DOCK_DRAG_STATE_CHANGED: "tool-window:dock-drag-state-changed",
 } as const;
 
 // Terminal-related IPC channels
